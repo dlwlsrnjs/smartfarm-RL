@@ -1,0 +1,48 @@
+GreenLightEnv:
+    weather_data_dir: greenlight_gym/envs/data/
+    location: MyGreenhouse
+    data_source: LOCAL
+    nx: 28
+    nu: 8
+    nd: 10
+    no_lamps: 0
+    led_lamps: 1
+    hps_lamps: 0
+    int_lamps: 0
+    dmfm: 0.0627
+    h: 1
+    season_length: 10
+    pred_horizon: !!float 0.0
+    time_interval: 300
+    start_train_year: 2024
+    end_train_year: 2024
+    start_train_day: 149
+    end_train_day: 330
+    training: True
+    reward_function: MultiplicativeReward
+
+GreenLightHeatCO2:
+    cLeaf: !!float 0.9e5
+    cStem: !!float 2.5e5
+    cFruit: !!float 2.8e5
+    tCanSum: !!float 3e3
+    co2_price: 0.1
+    gas_price: 0.26
+    tom_price: 1.6
+    k: [1.2, 8.e-3, 1.0]
+    obs_low:  [10, 0, 60]
+    obs_high: [35, 1000, 90]
+    omega: 1.0
+    control_signals: [uBoil, uCO2, uThScr, uVent]
+    model_obs_vars: [air_temp, co2_conc, in_rh, fruit_weight, fruit_harvest, PAR, daily_avg_temp, co2_resource, gas_resource, hour_of_day_sin, hour_of_day_cos, day_of_year_sin, day_of_year_cos]
+    weather_obs_vars: [glob_rad, out_temp, out_rh, out_co2, wind_speed]
+
+options:
+    start_days: [149, 160, 180]
+    growth_years: [2024]
+
+results_columns: [Time, Air Temperature, CO2 concentration, Humidity, Fruit weight,
+                    Fruit harvest, PAR, Daily mean crop temperature, CO2 resource, Gas resource, Hour of day sin,
+                    Hour of day cos, Day of year sin, Day of year cos, Global radiation, Outdoor temperature, 
+                    Outdoor Humidity, Outdoor CO2, Wind speed, uBoil, uCO2, uThScr, uVent, uLamp, uIntLamp, uGroPipe, 
+                    uBlScr, Profits, Temperature violation, CO2 violation, Humidity violation, Return, episode]

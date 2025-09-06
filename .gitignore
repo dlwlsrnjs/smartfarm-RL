@@ -1,0 +1,23 @@
+# Ignore virtualenv and artifacts
+gr/
+wandb/
+**/wandb/**
+train_data/**
+**/__pycache__/**
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+*.dylib
+*.egg-info/**
+build/
+dist/
+*.log
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/**
+.idea/**
+# Large data
+data/**

@@ -1,0 +1,38 @@
+GreenLightEnv:
+    weather_data_dir: greenlight_gym/envs/data/ # path to the weather data file
+    location: Seljaar   # location of the weatherdata
+    data_source: hires     # which data source we use
+    nx: 28                  # Number of states
+    nu: 8                   # number of control variables for GreenLight
+    nd: 10                  # weather variables
+    no_lamps: 0             # whether lamps are used
+    led_lamps: 1            # whether led lamps are used
+    hps_lamps: 0            # whether hps lamps are used
+    int_lamps: 0            # whether int lamps are used
+    dmfm: 0.0627            # dry matter fresh matter ratio
+    h: 1                    # stepsize for the RK4 solver
+    
+    season_length: 10       # number of growing days
+    pred_horizon: 0         # prediction horizon in days (corresponds to 15 minutes into the future)
+    time_interval: 900      # [s] time interval at what rate do we observe and control the environment
+    training: False         # whether training our algorithm
+
+GreenLightRuleBased:
+    cLeaf: !!float 0.9e5    # [DW] mg/m2
+    cStem: !!float 2.5e5    # [DW] mg/m2
+    cFruit: !!float 2.8e5   # [DW] mg/m2
+    tCanSum: !!float 3e3    # Temperature sum for canopy development
+    obs_low:  [10, 0, 60]   # lower bound for the observation space
+    obs_high: [35, 1000, 90] # upper bound for the observation space
+    control_signals: []
+    model_obs_vars: [co2_resource, gas_resource, heat_demand, electrical_resource, fruit_harvest, fruit_weight] # variable names that we want to observe from the model
+    weather_obs_vars: null # weather variable names to observe
+
+options:                    
+    # Options for the the evaluation dates 
+    start_days: [0 ,0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335]             # day since 01-jan for starting the episode
+    growth_years: [2000]        # year in which we start growing season
+
+results_columns: [Time (s), CO2 resource, Gas resource, Heat demand, Electrical resource,
+                    Fruit harvest, Fruit weight, Profits, Temperature violation, 
+                    CO2 violation, Humidity violation, Run time, Control frequency, episode]
