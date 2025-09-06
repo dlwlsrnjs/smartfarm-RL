@@ -1,0 +1,245 @@
+digital_twin:
+  meta:
+    site_name: TODO
+    timezone: Asia/Seoul
+    coordinate: { lat: TODO, lon: TODO, elev_m: TODO }
+    timestep_s: 300
+    solver: forward_euler
+  geometry:
+    floor_area_m2: 756
+    volume_m3: TODO
+    bays: TODO
+    ridge_height_m: TODO
+    gutter_height_m: TODO
+  cover:
+    u_value_W_m2K: 4.5
+    shortwave_transmittance: 0.75
+    longwave_emissivity: 0.85
+    infiltration_ach_closed: 0.5
+    infiltration_ach_per_ms: 0.2
+  vents:
+    roof_left:
+      effective_area_m2: 37.8
+      discharge_coeff: 0.6
+      full_open_time_s: 150
+      full_close_time_s: 150
+      position_0_1_initial: 0.0
+    roof_right:
+      effective_area_m2: 37.8
+      discharge_coeff: 0.6
+      full_open_time_s: 150
+      full_close_time_s: 150
+      position_0_1_initial: 0.0
+    wind_stack_model:
+      g: 9.80665
+      thermal_expansion_1_K: 0.00341
+      height_diff_m: TODO
+      wind_pressure_coeff: 0.5
+  screens:
+    top_shade:
+      type: shade
+      shade_factor_0_1: 0.5
+      r_value_m2K_W: 0.1
+      power_W: 258.4
+      full_open_time_s: 488    # ★ 3동 값
+      full_close_time_s: 485   # ★ 3동 값
+      control: position_0_1
+    top_energy:
+      type: energy
+      shade_factor_0_1: 0.15
+      r_value_m2K_W: 0.4
+      power_W: 258.4
+      full_open_time_s: 498    # ★ 3동 값
+      full_close_time_s: 495   # ★ 3동 값
+      control: position_0_1
+  hvac:
+    fcu:
+      fan_power_W: 3610
+      pump_power_W: 1500
+      cooling_capacity_kW: 35
+      heating_capacity_kW: 30
+      chw_supply_C: 7
+      hw_supply_C: 60
+      cop_cooling: 3.5
+      efficiency_heating: 0.9
+      control: on_off          # on_off | duty
+      dynamics:
+        response_delay_s: 10
+        min_on_s: 60
+        min_off_s: 60
+        ramp_rate_pct_per_s: 20
+    rail_pipe:
+      # 제어 불가: 모델 열원(참고치)로만 사용
+      power_W: 873
+      supply_C: 40
+      return_C: 35
+      convective_coeff_W_m2K: 8
+      control: disabled
+  airflow:
+    circulation_fans:
+      count: 12
+      power_each_W: 627
+      control: on_off | duty
+      mixing_efficiency_0_1: 0.7
+      equivalent_ach_on: 6
+    pad_fan: null
+  water_vapor:
+    mist:
+      capacity_kg_h: 150
+      evaporation_efficiency_0_1: 0.8
+      droplet_d50_um: 50
+      control: on_off | duty
+    dehumidifier:
+      capacity_kg_h: 0
+      electric_power_W: 0
+  co2:
+    dosing:
+      capacity_g_s: TODO
+      safety_ppm_max: 2000
+      control: on_off | duty
+    background_ppm: 420
+    leakage_ppm_per_h: 50
+  lighting:
+    led:
+      installed: false
+      ppfd_umol_m2s_at_full: 0
+      power_W: 0
+  sensors:
+    outdoor:
+      air_temperature_C: true
+      relative_humidity_pct: true
+      global_horizontal_irradiance_W_m2: true
+      wind_speed_m_s: true
+      wind_direction_deg: true
+      rain_detect: true
+      models:
+        wind: DAVIS KR-7911
+        solar: DAVIS KR6450
+        rain: WRS-203
+        th: KSH-7310
+    indoor:
+      air_temperature_C: true
+      relative_humidity_pct: true
+      co2_ppm: true
+    substrate:
+      temperature_C: true
+      moisture_vol_pct: true
+      ec_dS_m: true
+    sample_interval_s: 60
+    filters:
+      median_window: 3
+      spike_reject_sigma: 4
+      clock_skew_s: 0
+  weather_input:
+    source: station
+    timestep_s: 300
+    forecast_horizon_h: 0
+    timezone: Asia/Seoul
+    missing_data:
+      gap_fill: hold
+      max_gap_min: 10
+  model_params:
+    psychrometrics:
+      pressure_Pa: 101325
+      cp_air_J_kgK: 1006
+      rho_air_kg_m3: 1.2
+      lambda_v_J_kg: 2450000
+      stefan_boltzmann_W_m2K4: 5.670374419e-8
+    convection:
+      h_in_W_m2K: 5.0
+      h_out_W_m2K: 15.0
+    radiation:
+      sky_emissivity_model: brunt
+      view_factor_sky: 1.0
+      longwave_balance_enabled: true
+    evapotranspiration:
+      method: penman_monteith
+      lai: 2.0
+      canopy_height_m: 0.3
+      rc_min_s_m: 120
+      radiation_partition:
+        canopy_absorb_frac: 0.6
+        soil_absorb_frac: 0.4
+      aerodynamics:
+        ra_coeff_a: 208
+        ra_min_s_m: 30
+    co2_assimilation:
+      model: rectangular_hyperbola
+      amax_umol_m2s: 18
+      k_ppfd_umol_m2s: 200
+      co2_half_saturation_ppm: 350
+      temp_opt_C: 24
+      q10_respiration: 2.0
+    infiltration:
+      base_ach: 0.5
+      wind_coef_ach_per_ms: 0.2
+    mixing:
+      effective_zone_count: 1
+      fan_on_mixing_gain: 0.7
+  controls:
+    setpoints:
+      temp_day_C: 22
+      temp_night_C: 18
+      rh_max_pct: 85
+      co2_day_ppm: 900
+    priorities: [ safety, temp, rh, co2, energy ]
+    logic:
+      hysteresis_C: 0.3
+      rh_deadband_pct: 3
+      min_on_s: 60
+      min_off_s: 60
+      screen_sun_threshold_W_m2: 500
+      screen_close_night: true
+  initial_state:
+    Ta_in_C: 20
+    RH_in_pct: 70
+    CO2_ppm: 450
+    surfaces_temp_C: 20
+    soil_temp_C: 18
+    water_storage_kJ: 0
+  logging:
+    interval_s: 60
+    variables: [Ta_in_C, RH_in_pct, CO2_ppm,
+      energy_W, latent_W, vent_rate_kg_s,
+      fcu_on, circ_fans_on, mist_on,
+      thscr_pos, shade_pos, ventL_pos, ventR_pos]
+
+  interfaces:
+    nodes:
+      gateway_unit_id: 1
+      weather_unit_id: 2
+      indoor_unit_id: 3
+      actuator_unit_id: 4
+      fertigation_unit_id: 5
+    registers:
+      sensors:
+        Ta_out_C:          { unit_id: 2, addr: TODO }
+        RH_out_pct:        { unit_id: 2, addr: TODO }
+        GHI_W_m2:          { unit_id: 2, addr: TODO }
+        wind_m_s:          { unit_id: 2, addr: TODO }
+        wind_dir_deg:      { unit_id: 2, addr: TODO }
+        rain_bool:         { unit_id: 2, addr: TODO }
+        Ta_in_C:           { unit_id: 3, addr: TODO }
+        RH_in_pct:         { unit_id: 3, addr: TODO }
+        CO2_ppm:           { unit_id: 3, addr: TODO }
+        substrate_flow_L_h:{ unit_id: 5, addr: TODO }
+        substrate_ec_dS_m: { unit_id: 5, addr: TODO }
+        substrate_ph:      { unit_id: 5, addr: TODO }
+      actuators_cmd:
+        fcu_fan_cmd:          { unit_id: 4, addr: TODO, type: on_off }
+        fcu_pump_cmd:         { unit_id: 4, addr: TODO, type: on_off }
+        circulation_fans_cmd: { unit_id: 4, addr: TODO, type: on_off | duty }
+        mist_cmd:             { unit_id: 4, addr: TODO, type: on_off | duty }
+        co2_cmd:              { unit_id: 4, addr: TODO, type: on_off | duty }
+        roof_left_pos_cmd:    { unit_id: 4, addr: TODO, type: 0_1 }
+        roof_right_pos_cmd:   { unit_id: 4, addr: TODO, type: 0_1 }
+        top_shade_pos_cmd:    { unit_id: 4, addr: TODO, type: 0_1 }
+        top_energy_pos_cmd:   { unit_id: 4, addr: TODO, type: 0_1 }
+        fertigation_cmd:      { unit_id: 5, addr: TODO, type: on_off | duty }
+      actuators_fb:
+        roof_left_pos_fb:   { unit_id: 4, addr: TODO }
+        roof_right_pos_fb:  { unit_id: 4, addr: TODO }
+        top_shade_pos_fb:   { unit_id: 4, addr: TODO }
+        top_energy_pos_fb:  { unit_id: 4, addr: TODO }
+
+

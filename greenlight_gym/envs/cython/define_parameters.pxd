@@ -100,6 +100,10 @@ cdef packed struct Parameters:
     # char tauShScrNir         # NIR transmission coefficient of shadow screen
     # char tauShScrPar         # PAR transmission coefficient of shadow screen
     # char tauShScrFir         # FIR transmission coefficient of shadow screen
+    
+    # Simplified shading screen effectiveness (fractional attenuation of PAR/NIR when uShade>0)
+    double etaShScrPar       # 0..1, PAR fraction blocked at full closure
+    double etaShScrNir       # 0..1, NIR fraction blocked at full closure
     # char etaShScrCd          # Effect of shadow screen on discharge coefficient
     # char etaShScrCw          # Effect of shadow screen on wind pressure coefficient
     # char kShScr              # Shadow screen flux coefficient
@@ -295,6 +299,33 @@ cdef packed struct Parameters:
 
     double dmfm         # Dry matter to Fresh matter conversion rate
 
+    # Forced ventilation equivalence by circulation fans (ACH when uCircFans=1)
+    double fanAchOn
+
+    ############################
+    #### FCU & Electricals ####
+    ############################
+    # FCU thermal capacities [W]
+    double qFcuHeat      # FCU heating capacity [W]
+    double qFcuCool      # FCU cooling capacity [W] (positive magnitude)
+    double copCool       # Cooling COP (dimensionless)
+    # FCU electrical powers [W]
+    double pFcuFan       # FCU fan power
+    double pFcuPump      # FCU pump power
+    double fcu_cooling_capacity_W  # FCU cooling capacity [W]
+    # Circulation fans (count and each power)
+    double nCircFans
+    double wCircFan
+    # Screen drive powers [W]
+    double wShade
+    double wThScr
+
+    ############################
+    #### Mist (Fog) System  ####
+    ############################
+    double mistCapacity_kg_h   # Total mist capacity [kg h^{-1}] (house total)
+    double etaMist             # Evaporation efficiency [0..1]
+
 # Initialize the values of a Parameters struct
 cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char hpsLamps, char intLamps):
     p.alfaLeafAir = 5
@@ -405,6 +436,10 @@ cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char
     # p.etaShScrCw = 0
     # p.kShScr = 0
 
+    # Simplified shading effect (used with uShade mapped to u[4])
+    p.etaShScrPar = 0.5
+    p.etaShScrNir = 0.5
+
     ## Thermal Screen
     p.epsThScrFir = 0.67
     p.rhoThScr = 200 	
@@ -492,7 +527,7 @@ cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char
 
     ## Canopy photosynthesis
     p.globJtoUmol = 2.3
-    p.j25LeafMax = 210
+    p.j25LeafMax = 160
     p.cGamma = 1.7
     p.etaCo2AirStom = 0.67
     p.eJ = 37000
@@ -500,38 +535,38 @@ cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char
     p.S = 710
     p.H = 220000
     p.theta = 0.7
-    p.alpha = 0.385
+    p.alpha = 0.32
     p.mCh2o = 30e-3
     p.mCo2 = 44e-3
 
     p.parJtoUmolSun = 4.6 
 
-    p.laiMax = 3
-    p.sla = 2.66e-5
+    p.laiMax = 2.8
+    p.sla = 2.8e-5
     p.rgr = 3e-6
     p.cLeafMax = p.laiMax/p.sla
 
-    p.cFruitMax = 300_000
+    p.cFruitMax = 420_000
 
     p.cFruitG = 0.27
     p.cLeafG = 0.28
     p.cStemG = 0.3
-    p.cRgr = 2_850_000
+    p.cRgr = 2_500_000
     p.q10m = 2
-    p.cFruitM = 1.16e-7
-    p.cLeafM = 3.47e-7
-    p.cStemM = 1.47e-7
+    p.cFruitM = 1.0e-7
+    p.cLeafM = 2.8e-7
+    p.cStemM = 1.2e-7
 
-    p.rgFruit = 0.328
-    p.rgLeaf = 0.095
-    p.rgStem = 0.074
+    p.rgFruit = 0.42
+    p.rgLeaf = 0.09
+    p.rgStem = 0.06
 
     ## Carbohydrates buffer
     p.cBufMax = 20_000
     p.cBufMin = 1000
-    p.tCan24Max = 24.5
+    p.tCan24Max = 24
     p.tCan24Min = 15
-    p.tCanMax = 34
+    p.tCanMax = 30
     p.tCanMin = 10
 
     ## Crop development
@@ -678,3 +713,22 @@ cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char
     p.minWind = 0.25
 
     p.dmfm = 0.0627
+
+    # Circulation fans: equivalent ACH when fully on
+    p.fanAchOn = 6.0
+
+    ## FCU & Electrical defaults (can be overridden externally)
+    p.qFcuHeat = 0
+    p.qFcuCool = 0
+    p.copCool = 0
+    p.pFcuFan = 0
+    p.pFcuPump = 0
+    p.fcu_cooling_capacity_W = 35000
+    p.nCircFans = 12
+    p.wCircFan = 627
+    p.wShade = 258.4
+    p.wThScr = 258.4
+
+    ## Mist defaults
+    p.mistCapacity_kg_h = 0
+    p.etaMist = 0.8

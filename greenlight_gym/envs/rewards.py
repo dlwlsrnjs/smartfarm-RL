@@ -51,11 +51,16 @@ class HarvestHeatCO2Reward(BaseReward):
         self.gas_price = gas_price  # gas price €/m3
         self.tom_price = tom_price  # tomato price €/[FW] kg
         self.dmfm = dmfm
+        self.elec_price = 0.0       # €/kWh, set externally if used
+        self.time_interval_h = time_interval
 
         # compute the min and the max reward from profit
         self.rmin = -(max_co2_rate*time_interval*co2_price) -\
             (1e-6*max_heat_cap*time_interval)/energy_content_gas*gas_price   # [€ m^-2]
         self.rmax = max_harvest/self.dmfm * time_interval * tom_price           # [€ m^-2]
+
+    def set_electricity_price(self, elec_price_eur_per_kwh: float):
+        self.elec_price = elec_price_eur_per_kwh
 
     def _compute_reward(self, GLModel: greenlight_cy.GreenLight) -> SupportsFloat:
         """
@@ -68,7 +73,22 @@ class HarvestHeatCO2Reward(BaseReward):
             SupportsFloat: profit-based reward for the agent.
         """
         delta_harvest =  getattr(GLModel, "fruit_harvest")/self.dmfm # [kg [DM]{CH2O} m^-2]
-        self.profit = delta_harvest * self.tom_price - getattr(GLModel, "co2_resource")*self.co2_price - getattr(GLModel, "gas_resource") * self.gas_price  # [€ m^-2]
+        profit = delta_harvest * self.tom_price \
+                 - getattr(GLModel, "co2_resource")*self.co2_price \
+                 - getattr(GLModel, "gas_resource") * self.gas_price  # [€ m^-2]
+
+        # Optional: subtract electrical energy costs if available via env info
+        try:
+            # Expect env to attach instantaneous electrical power W and integrate externally to kWh
+            # Here we approximate using GLModel.time_interval [h] and an attribute 'electrical_resource'
+            # If not present, skip.
+            elec_power_W = getattr(GLModel, "electrical_resource", 0.0)
+            elec_kWh = max(0.0, elec_power_W) * self.time_interval_h / 1000.0
+            profit -= self.elec_price * elec_kWh
+        except Exception:
+            pass
+
+        self.profit = profit
         return self._scale(self.profit)
 
 class ArcTanPenaltyReward(BaseReward):
@@ -172,13 +192,13 @@ class MultiplicativeReward(BaseReward):
 #         self.k = np.array(k)
 #         self.obs_low = np.array(obs_low)
 #         self.obs_high = np.array(obs_high)
-
+#
 #     def _compute_penalty(self, obs: np.ndarray) -> float:
 #         lowerbound = self.obs_low[:] - obs[:]
 #         lowerbound[lowerbound < 0] = 0
 #         upperbound = obs[:] - self.obs_high[:]
 #         upperbound[upperbound < 0] = 0
 #         return lowerbound + upperbound
-    
+#     
 #     def _compute_reward(self, GLModel: greenlight_cy.GreenLight) -> SupportsFloat:
 #         self.abs_pen = self._compute_penalty(GLModel.get_indoor_obs())

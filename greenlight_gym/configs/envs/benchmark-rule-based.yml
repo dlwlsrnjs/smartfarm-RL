@@ -3,13 +3,13 @@ GreenLightEnv:
     location: Amsterdam     # location of the weatherdata
     data_source: KNMI       # which data source we use
     nx: 28                  # Number of states
-    nu: 8                   # number of control variables for GreenLight
+    nu: 11                  # number of control variables for GreenLight
     nd: 10                  # weather variables
     no_lamps: 0             # whether lamps are used
     led_lamps: 1            # whether led lamps are used
     hps_lamps: 0            # whether hps lamps are used
-    int_lamps: 0            # whether int lamps are used
-    dmfm: 0.0627            # dry matter fresh matter ratio
+    int_lamps: 0            # whether interlighting lamps are used
+    dmfm: 0.10              # dry matter fresh matter ratio (strawberry Seolhyang)
     h: 1                    # stepsize for the RK4 solver
     season_length: 10       # number of growing days
     pred_horizon: 0         # prediction horizon in days (corresponds to 15 minutes into the future)
@@ -17,12 +17,12 @@ GreenLightEnv:
     training: False         # whether training our algorithm
 
 GreenLightRuleBased:
-    cLeaf: !!float 0.9e5    # [DW] mg/m2
-    cStem: !!float 2.5e5    # [DW] mg/m2
-    cFruit: !!float 2.8e5   # [DW] mg/m2
-    tCanSum: !!float 3e3    # Temperature sum for canopy development
-    co2_price: 0.1          # €/kg
-    gas_price: 0.26         # €/m3
+    cLeaf: !!float 1.2e5    # [DW] mg/m2 (strawberry initial)
+    cStem: !!float 0.6e5    # [DW] mg/m2
+    cFruit: !!float 0.4e5   # [DW] mg/m2
+    tCanSum: !!float 800    # Temperature sum (initial stage)
+    co2_price: 0.0          # €/kg (electric-only)
+    gas_price: 0.0          # €/m3 (electric-only)
     tom_price: 1.6          # €/[FW] kg
     k: [1, 4.e-3, 0.4]      # penalty coefficients
     obs_low:  [10, 0, 60]  # lower bound for the observation space
@@ -39,6 +39,6 @@ options:                    # Options for the the evaluation date
 results_columns: [Time, Air Temperature, CO2 concentration, Humidity, Fruit weight,
                     Fruit harvest, PAR, CO2 resource, Gas resource, Global radiation, 
                     Outdoor temperature, Outdoor Humidity, Outdoor CO2, Wind speed, uBoil,
-                    uCO2, uThScr, uVent, uLamp, uIntLamp,
-                    uGroPipe, uBlScr, Profits, Temperature violation, CO2 violation, 
+                    uCO2, uThScr, uVent, uShade, uCircFans,
+                    uGroPipe, uBlScr, uMist, uFcuFan, uFcuPump, Profits, Temperature violation, CO2 violation, 
                     Humidity violation, Final return, episode]

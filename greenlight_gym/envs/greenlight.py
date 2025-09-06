@@ -1,4 +1,6 @@
 from typing import Optional, Tuple, Any, List, Dict
+import os
+import yaml
 
 import numpy as np
 import pandas as pd
@@ -132,16 +134,27 @@ class GreenLightEnv(gym.Env):
         self.observation_space = None
         self.action_space = None
 
-        # which actuators the GreenLight model can control.
+        # which actuators the GreenLight model can control (3동 정책 노출도 기준)
+        # 주의: 내부 GLModel u-인덱스는 변경되지 않습니다.
+        # - uFCU -> u[0] (모델 난방에 매핑; FCU on/off 프록시)
+        # - uCO2 -> u[1]
+        # - uThScr -> u[2]
+        # - uVent -> u[3]
+        # - uShade -> u[4] (모델상 램프 채널에 매핑; 물리 효과는 별도 처리 필요)
+        # - uCircFans -> u[5] (모델상 인터라이트 채널에 매핑; 물리 효과는 별도 처리 필요)
+        # 레일파이프(u[6]), 블랙아웃(u[7])은 외부 제어에서 제외
         self.control_indices = {
             "uBoil": 0,
             "uCO2": 1,
             "uThScr": 2,
-            "uVent": 3,
-            "uLamp": 4,
-            "uIntLamp": 5,
+            "uVent": 3,      # Env-aggregated uVent_eff injected here
+            "uShade": 4,
+            "uCircFans": 5,
             "uGroPipe": 6,
             "uBlScr": 7,
+            "uMist": 8,
+            "uFcuFan": 9,
+            "uFcuPump": 10,
         }
 
         # lower and upper bounds for air temperature, co2 concentration, humidity
@@ -161,6 +174,35 @@ class GreenLightEnv(gym.Env):
             self.solver_steps,
         )
 
+        # Optional: load metering config from YAML if available
+        self.config = {}
+        try:
+            cfg_path = os.path.join("config", "greenhouse.yaml")
+            if os.path.exists(cfg_path):
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    self.config = yaml.safe_load(f)
+        except Exception:
+            self.config = {}
+
+        # Pre-extract metering parameters with safe defaults
+        dtwin = self.config.get("digital_twin", {}) if isinstance(self.config, dict) else {}
+        hvac = dtwin.get("hvac", {})
+        fcu = hvac.get("fcu", {})
+        airflow = dtwin.get("airflow", {})
+        circ = airflow.get("circulation_fans", {})
+        screens = dtwin.get("screens", {})
+        top_shade = screens.get("top_shade", {})
+        top_energy = screens.get("top_energy", {})
+
+        self._meter = {
+            "fcu_fan_W": float(fcu.get("fan_power_W", 0.0)) if fcu else 0.0,
+            "fcu_pump_W": float(fcu.get("pump_power_W", 0.0)) if fcu else 0.0,
+            "circ_count": int(circ.get("count", 0)) if circ else 0,
+            "circ_each_W": float(circ.get("power_each_W", 0.0)) if circ else 0.0,
+            "shade_W": float(top_shade.get("power_W", 0.0)) if top_shade else 0.0,
+            "energy_W": float(top_energy.get("power_W", 0.0)) if top_energy else 0.0,
+        }
+
     def step(
         self, action: np.ndarray
     ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
@@ -176,9 +218,88 @@ class GreenLightEnv(gym.Env):
         # scale the action to the range of the control inputs, which is between [0, 1]
         action = self._scale(action, self.action_space.low, self.action_space.high)
 
+        # compute area-weighted roof vent effective opening and inject into control vector (index uVent)
+        try:
+            vents_cfg = self.config.get("digital_twin", {}).get("vents", {})
+            AL = float(vents_cfg.get("roof_left", {}).get("effective_area_m2", 0.0))
+            AR = float(vents_cfg.get("roof_right", {}).get("effective_area_m2", 0.0))
+            den = max(AL + AR, 1e-6)
+            # decode desired L/R from action scaled to [0,1]
+            uVentL = action[self.control_indices["uVent"]] if "uVentL" not in self.control_indices else action[self.control_indices["uVentL"]]
+            uVentR = action[self.control_indices["uVent"]] if "uVentR" not in self.control_indices else action[self.control_indices["uVentR"]]
+            uVent_eff = (uVentL * AL + uVentR * AR) / den
+            # place effective vent into uVent slot
+            action[self.control_indices["uVent"]] = np.clip(uVent_eff, 0.0, 1.0)
+            # cache for logging
+            self._last_uVent_eff = float(uVent_eff)
+        except Exception:
+            pass
+
         # simulate single timestep using the GreenLight model and get the observation
         self.GLModel.step(action, self.control_idx)
         obs = self._get_obs()
+
+        # ===== Power & Energy metering =====
+        try:
+            dt = float(self.config.get("digital_twin", {}).get("meta", {}).get("timestep_s", self.time_interval))
+        except Exception:
+            dt = float(self.time_interval)
+
+        # derive control outputs used
+        try:
+            u = self.GLModel.getControlsArray()
+        except Exception:
+            u = None
+
+        P_FCU = P_CIRC = P_SHADE = P_ENERGY = 0.0
+        fcu_on = circ_fans_on = 0.0
+        screen_pos = vent_pos = 0.0
+
+        if u is not None:
+            # map controls
+            uThScr    = float(u[self.control_indices.get("uThScr", 2)])
+            uShade    = float(u[self.control_indices.get("uShade", 4)])
+            uCircFans = float(u[self.control_indices.get("uCircFans", 5)])
+            uMist     = float(u[self.control_indices.get("uMist", 8)])
+            uFcuFan   = float(u[self.control_indices.get("uFcuFan", 9)])
+            uFcuPump  = float(u[self.control_indices.get("uFcuPump", 10)])
+
+            # FCU electric power (fan/pump separated)
+            P_FCU = self._meter["fcu_fan_W"] * (1.0 if uFcuFan > 0.5 else 0.0) + \
+                    self._meter["fcu_pump_W"] * (1.0 if uFcuPump > 0.5 else 0.0)
+
+            # Circulation fans power (allow duty)
+            P_CIRC = self._meter["circ_count"] * self._meter["circ_each_W"] * max(0.0, min(1.0, uCircFans))
+
+            # Screen drive power (approx: only when moving; fallback to 0)
+            # You can refine by detecting movement via previous positions
+            P_SHADE = 0.0  # treat motors as impulse; average ignored here
+            P_ENERGY = 0.0
+
+            fcu_on = 1.0 if (uFcuFan > 0.5 and uFcuPump > 0.5) else 0.0
+            circ_fans_on = 1.0 if uCircFans > 0.5 else (uCircFans if 0.0 < uCircFans < 0.5 else 0.0)
+            screen_pos = uThScr
+            # compute effective vent position by area weighting if config available
+            try:
+                vents_cfg = self.config.get("digital_twin", {}).get("vents", {})
+                AL = float(vents_cfg.get("roof_left", {}).get("effective_area_m2", 0.0))
+                AR = float(vents_cfg.get("roof_right", {}).get("effective_area_m2", 0.0))
+                den = max(AL + AR, 1e-6)
+                vent_pos = (uVentL*AL + uVentR*AR) / den
+            except Exception:
+                vent_pos = 0.5*(uVentL + uVentR)
+
+        P_total_W = P_FCU + P_CIRC + P_SHADE + P_ENERGY
+
+        dE_total_kWh = P_total_W * dt / 3_600_000.0
+        dE_fcu_kWh   = P_FCU     * dt / 3_600_000.0
+        dE_circ_kWh  = P_CIRC    * dt / 3_600_000.0
+        dE_scr_kWh   = (P_SHADE + P_ENERGY) * dt / 3_600_000.0
+
+        self.energy_kWh_total = getattr(self, "energy_kWh_total", 0.0) + dE_total_kWh
+        self.energy_kWh_fcu   = getattr(self, "energy_kWh_fcu",   0.0) + dE_fcu_kWh
+        self.energy_kWh_circ  = getattr(self, "energy_kWh_circ",  0.0) + dE_circ_kWh
+        self.energy_kWh_scr   = getattr(self, "energy_kWh_scr",   0.0) + dE_scr_kWh
 
         # check if the simulation has reached a terminal state and get the reward
         if self._terminalState(obs):
@@ -189,6 +310,23 @@ class GreenLightEnv(gym.Env):
 
         # additional information to return
         info = self._get_info()
+        try:
+            info.update({
+                "P_FCU_W": P_FCU,
+                "P_CIRC_W": P_CIRC,
+                "P_SCR_W": P_SHADE + P_ENERGY,
+                "P_TOTAL_W": P_total_W,
+                "E_TOTAL_kWh": self.energy_kWh_total,
+                "E_FCU_kWh": self.energy_kWh_fcu,
+                "E_CIRC_kWh": self.energy_kWh_circ,
+                "E_SCR_kWh": self.energy_kWh_scr,
+                "fcu_on": fcu_on,
+                "circ_fans_on": circ_fans_on,
+                "screen_pos": screen_pos,
+                "vent_pos": vent_pos,
+            })
+        except Exception:
+            pass
 
         return (obs, reward, self.terminated, False, info)
 
@@ -361,6 +499,11 @@ class GreenLightEnv(gym.Env):
         # reset the GreenLight model starting settings
         self.GLModel.reset(self.weatherData, timeInDays)
         self.terminated = False
+        # init energy accumulators
+        self.energy_kWh_total = 0.0
+        self.energy_kWh_fcu = 0.0
+        self.energy_kWh_circ = 0.0
+        self.energy_kWh_scr = 0.0
         return self._get_obs(), {}
 
 
@@ -499,6 +642,13 @@ class GreenLightHeatCO2(GreenLightEnv):
         self.rewards = REWARDS[self.reward_function](
             rewards_list=[harvest_reward, penalty_reward], omega=omega
         )
+        # Optional: set electricity price (€/kWh). Typical smart greenhouse tariff ~0.15–0.2 €/kWh.
+        try:
+            elec_price = float(self.config.get("digital_twin", {}).get("tariffs", {}).get("electricity_eur_per_kwh", 0.18))
+            # rewards_list[0] is HarvestHeatCO2Reward
+            self.rewards.rewards_list[0].set_electricity_price(elec_price)
+        except Exception:
+            pass
 
     def _reward(self) -> float:
         """
@@ -607,6 +757,12 @@ class GreenLightRuleBased(GreenLightEnv):
                 ArcTanPenaltyReward(k, obs_low, obs_high),
             ]
         )
+        # Optional electricity price
+        try:
+            elec_price = float(self.config.get("digital_twin", {}).get("tariffs", {}).get("electricity_eur_per_kwh", 0.18))
+            self.rewards.rewards_list[0].set_electricity_price(elec_price)
+        except Exception:
+            pass
 
     def _reward(self) -> float:
         return self.rewards._compute_reward(self.GLModel)
