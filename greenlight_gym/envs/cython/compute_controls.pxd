@@ -166,18 +166,53 @@ cdef inline double* controlSignal(AuxiliaryStates* a, Parameters* p, double* x, 
                 fmax(proportionalControl(rhIn, p.rhMax + p.blScrExtraRh, -0.5, 0, 1), 1-ventCold)
 
 
-    # boiler, co2, thscr, roof, lamps, intlamps, boilgro, blscr
-    u[0] = proportionalControl(x[2], heatSetPoint, p.tHeatBand, 0, 1)
-    u[1] = proportionalControl(co2InPpm, co2SetPoint, p.co2Band, 0, 1)
-    u[2] = fmin(thScrCold, fmax(thScrHeat, thScrRh))
+    # House 3 Smart Greenhouse Control Logic
+    # u[0]: uBoil (disabled - using FCU instead)
+    # u[1]: uCO2 - CO2 dosing system (ON/OFF)
+    # u[2]: uThScr - thermal screen (ON/OFF) 
+    # u[3]: uVent - roof vent opening ratio (0-1)
+    # u[4]: uShade - shade screen (ON/OFF)
+    # u[5]: uCircFans - circulation fans (ON/OFF)
+    # u[6]: uGroPipe (disabled)
+    # u[7]: uBlScr (disabled - not used in House 3)
+    # u[8]: uMist - mist system (ON/OFF)
+    # u[9]: uFcuFan - FCU fan (ON/OFF)
+    # u[10]: uFcuPump - FCU pump (ON/OFF)
+    
+    # FCU Heating/Cooling Control (ON/OFF)
+    cdef double fcuHeating = (x[2] < heatSetPoint - 0.5)  # 0.5°C hysteresis
+    cdef double fcuCooling = (x[2] > heatSetPoint + 1.0)  # 1.0°C hysteresis
+    
+    # CO2 Control (ON/OFF)
+    u[1] = 1.0 if (co2InPpm < co2SetPoint - 50) else 0.0  # 50 ppm hysteresis
+    
+    # Thermal Screen Control (ON/OFF)
+    u[2] = 1.0 if (thScrCold > 0.5) else 0.0
+    
+    # Roof Vent Control (0-1 opening ratio)
     u[3] = fmin(ventCold, fmax(ventHeat, ventRh))
-    u[4] = lampOn
-    u[5] = intLampOn * p.intLamps
-    u[6] = proportionalControl(x[2], heatSetPoint, p.tHeatBand, 0, 1) * p.pBoilGro
-    u[7] = p.useBlScr * (1-d[9]) * fmax(lampOn, intLampOn)
-
-    # UNUSED shading screen, permanent shading screen, side ventilation
-    # u[8] = 0
-    # u[9] = 0
-    # u[10] = 0
+    
+    # Shade Screen Control (ON/OFF) - based on radiation
+    u[4] = 1.0 if (d[0] > 800) else 0.0  # Close when high radiation
+    
+    # Circulation Fans Control (ON/OFF) - for mixing and forced ventilation
+    u[5] = 1.0 if (fcuHeating or fcuCooling or u[3] > 0.1) else 0.0
+    
+    # Grow Pipe (disabled in House 3)
+    u[6] = 0.0
+    
+    # Blackout Screen (not used in House 3)
+    u[7] = 0.0
+    
+    # Mist System Control (ON/OFF) - for humidity control
+    u[8] = 1.0 if (rhIn < 60.0 and not fcuCooling) else 0.0  # Mist when low RH and not cooling
+    
+    # FCU Fan Control (ON/OFF)
+    u[9] = 1.0 if (fcuHeating or fcuCooling) else 0.0
+    
+    # FCU Pump Control (ON/OFF) 
+    u[10] = 1.0 if (fcuHeating or fcuCooling) else 0.0
+    
+    # Legacy boiler control (disabled - using FCU)
+    u[0] = 0.0
     return u

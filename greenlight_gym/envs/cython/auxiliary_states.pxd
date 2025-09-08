@@ -240,7 +240,7 @@ cdef packed struct AuxiliaryStates:
     #### Convective and conductive heat fluxes ####
     ###############################################
 
-    char fVentForced
+    double fVentForced
     double hCanAir
     double hAirFlr
     double hAirThScr
@@ -368,9 +368,14 @@ cdef packed struct AuxiliaryStates:
     char hGeoPipe
 
     char hecMechAir
-    char hAirMech
+    double hAirMech
     char mvAirMech
-    char lAirMech
+    double lAirMech
+    
+    ########################
+    #### Mist variables ####
+    ########################
+    double mvMist
     char hBufHotPipe
 
 cdef inline double tau12(double tau1, double tau2, double rho1Dn, double rho2Up):
@@ -785,7 +790,8 @@ cdef inline void update(AuxiliaryStates* a, Parameters* p, double* u, double* x,
 
     # PAR above the canopy from the sun [W m^{-2}]
     # Equation 27 [1], Equation A14 [5]
-    a.rParGhSun = (1 - p.etaGlobAir) * a.tauCovPar * p.etaGlobPar * d[0]
+    # Apply simplified shading screen (u[4]) as fractional attenuation on PAR
+    a.rParGhSun = (1 - p.etaGlobAir) * a.tauCovPar * p.etaGlobPar * d[0] * (1 - u[4]*p.etaShScrPar)
 
     # PAR above the canopy from the lamps [W m^{-2}] 
     # Equation A15 [5]
@@ -798,7 +804,7 @@ cdef inline void update(AuxiliaryStates* a, Parameters* p, double* u, double* x,
     # Global radiation above the canopy from the sun [W m^{-2}]
     # (PAR+NIR, where UV is counted together with NIR)
     # Equation 7.24 [7]
-    a.rCanSun = (1 - p.etaGlobAir) * d[0] * (p.etaGlobPar * a.tauCovPar + p.etaGlobNir * a.tauCovNir)
+    a.rCanSun = (1 - p.etaGlobAir) * d[0] * ((p.etaGlobPar * a.tauCovPar) * (1 - u[4]*p.etaShScrPar) + (p.etaGlobNir * a.tauCovNir) * (1 - u[4]*p.etaShScrNir))
     
     # Global radiation above the canopy from the lamps [W m^{-2}]
     # (PAR+NIR, where UV is counted together with NIR)
@@ -1388,14 +1394,15 @@ cdef inline void update(AuxiliaryStates* a, Parameters* p, double* u, double* x,
     # There is also a mistake in [4], whenever sqrt is taken, abs should be included
     # addAux(gl, 'fThScr', u.thScr*p.kThScr.*(abs((x.tAir-x.tTop)).^0.66) + \ 
     #     ((1-u.thScr)./gl.a.rhoAirMean).*sqrt(0.5*gl.a.rhoAirMean.*(1-u.thScr).*p.g.*abs(gl.a.rhoAir-gl.a.rhoTop)))
-    a.fThScr = u[2] * p.kThScr * (fabs(x[2] - x[3])**0.66) + \
+    cdef double tempDiff = fabs(x[2] - x[3])
+    a.fThScr = u[2] * p.kThScr * (tempDiff**0.66 if tempDiff > 1e-6 else 0.0) + \
         ((1 - u[2]) / a.rhoAirMean) * sqrt(0.5 * a.rhoAirMean * (1 - u[2]) * p.g * fabs(a.rhoAir - a.rhoTop))
     # Air flux through the blackout screen [m s^{-1}]
     # Equation A37 [5]
     # addAux(gl, 'fBlScr', u.blScr*p.kBlScr.*(abs((x.tAir-x.tTop)).^0.66) + \ 
     #     ((1-u.blScr)./gl.a.rhoAirMean).*sqrt(0.5*gl.a.rhoAirMean.*(1-u.blScr).*p.g.*abs(gl.a.rhoAir-gl.a.rhoTop)))
 
-    a.fBlScr = u[7] * p.kBlScr * (fabs(x[2] - x[3])**0.66) + \
+    a.fBlScr = u[7] * p.kBlScr * (tempDiff**0.66 if tempDiff > 1e-6 else 0.0) + \
         ((1 - u[7]) / a.rhoAirMean) * sqrt(0.5 * a.rhoAirMean * (1 - u[7]) * p.g * fabs(a.rhoAir - a.rhoTop))
 
     # Air flux through the screens [m s^{-1}]
@@ -1407,9 +1414,21 @@ cdef inline void update(AuxiliaryStates* a, Parameters* p, double* u, double* x,
     #### Convective and conductive heat fluxes [W m^{-2}] ####
     ##########################################################
 
-    # # Forced ventilation (doesn't exist in current gh)
-    # addAux(gl, 'fVentForced', DynamicElement('0', 0))
-    a.fVentForced = 0
+    # House 3 Ventilation System: Roof Vents + Circulation Fans
+    # u[3]: Roof vent opening ratio (0-1)
+    # u[5]: Circulation fans (ON/OFF)
+    
+    # Natural ventilation through roof vents [m³ m⁻² s⁻¹]
+    # Based on buoyancy and wind effects
+    cdef double fVentNatural = u[3] * a.fVentRoof
+    
+    # Forced ventilation by circulation fans [m³ m⁻² s⁻¹]
+    # Convert ACH to m³ m⁻² s⁻¹: ACH [1/h] * hAir [m] / 3600
+    cdef double fVentForced = u[5] * (p.fanAchOn * p.hAir / 3600.0)
+    
+    # Combined ventilation rate (natural + forced)
+    # Forced ventilation is additive to natural ventilation
+    a.fVentForced = fVentNatural + fVentForced
     # # Between canopy and air in main compartment [W m^{-2}]
     # addAux(gl, 'hCanAir', sensible(2*p.alfaLeafAir*gl.a.lai, x.tCan, x.tAir))
     a.hCanAir = sensible(2*p.alfaLeafAir*a.lai, x[4], x[2])
@@ -1817,6 +1836,15 @@ cdef inline void update(AuxiliaryStates* a, Parameters* p, double* u, double* x,
     # addAux(gl, 'mcAirOut', airMc(gl.a.fVentSide+gl.a.fVentForced, x.co2Air, d.co2Out))
     a.mcAirOut = airMc(a.fVentSide+a.fVentForced, x[0], d[3])
 
+    ############################
+    #### Mist (Fog) Inflow  ####
+    ############################
+    # Mist mass flow [kg m^{-2} s^{-1}] (house total to per-area)
+    # u[8] is uMist after control index update
+    a.mvMist = (u[8] * (p.mistCapacity_kg_h/3600.0) * p.etaMist) / p.aFlr
+    # Latent heat addition due to mist evaporation
+    a.lAirMech = a.lAirMech + p.L * a.mvMist
+
     ## Heat from boiler - Section 9.2 [1]
 
     # Heat from boiler to pipe rails [W m^{-2}]
@@ -1851,11 +1879,32 @@ cdef inline void update(AuxiliaryStates* a, Parameters* p, double* u, double* x,
     # Equation A34 [5], Equation 7.34 [7]
     a.hLampCool = p.etaLampCool * a.qLampIn
 
-    ## Heat harvesting, mechanical cooling and dehumidification
-    # By default there is no mechanical cooling or heat harvesting
-    # see addHeatHarvesting.m for mechanical cooling and heat harvesting
-    a.hecMechAir = 0
-    a.hAirMech = 0
-    a.mvAirMech = 0
-    a.lAirMech = 0
-    a.hBufHotPipe = 0
+    ## FCU (Fan Coil Unit) Heating and Cooling System
+    # FCU provides both heating and cooling for House 3
+    # u[9]: FCU fan (ON/OFF), u[10]: FCU pump (ON/OFF)
+    # Both must be ON for FCU to operate
+    
+    a.hecMechAir = 0  # Not used in FCU system
+    
+    # FCU operation check (both fan and pump must be ON)
+    cdef double fcuOn = u[9] * u[10]
+    
+    # FCU heating/cooling capacity [W/m²]
+    # Positive = heating, Negative = cooling
+    # Use temperature difference to determine heating vs cooling
+    cdef double tempDiff = x[2] - (p.tSpDay + p.tSpNight) / 2.0  # vs average setpoint
+    
+    if fcuOn > 0.5:  # FCU is ON
+        if tempDiff < -1.0:  # Heating needed
+            a.hAirMech = p.qFcuHeat / p.aFlr  # Heating capacity [W/m²]
+        elif tempDiff > 1.0:  # Cooling needed  
+            a.hAirMech = -p.qFcuCool / p.aFlr  # Cooling capacity [W/m²] (negative)
+        else:  # Near setpoint
+            a.hAirMech = 0.0
+    else:  # FCU is OFF
+        a.hAirMech = 0.0
+    
+    # FCU dehumidification (only during cooling)
+    a.mvAirMech = 0.0  # No dehumidification in FCU system
+    a.lAirMech = 0.0   # No latent heat removal
+    a.hBufHotPipe = 0  # Not used in FCU system

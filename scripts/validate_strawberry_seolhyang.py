@@ -1,5 +1,10 @@
 import numpy as np
 import math
+import sys
+import os
+
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from greenlight_gym.envs.cython.greenlight_cy import GreenLight as GL
 

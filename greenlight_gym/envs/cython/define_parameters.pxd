@@ -717,13 +717,13 @@ cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char
     # Circulation fans: equivalent ACH when fully on
     p.fanAchOn = 6.0
 
-    ## FCU & Electrical defaults (can be overridden externally)
-    p.qFcuHeat = 0
-    p.qFcuCool = 0
-    p.copCool = 0
-    p.pFcuFan = 0
-    p.pFcuPump = 0
-    p.fcu_cooling_capacity_W = 35000
+    ## FCU & Electrical defaults (House 3 specifications)
+    p.qFcuHeat = 30000    # FCU heating capacity [W] (30 kW)
+    p.qFcuCool = 35000    # FCU cooling capacity [W] (35 kW) 
+    p.copCool = 3.5       # Cooling COP
+    p.pFcuFan = 3610      # FCU fan power [W]
+    p.pFcuPump = 1500     # FCU pump power [W]
+    p.fcu_cooling_capacity_W = 35000  # Legacy parameter
     p.nCircFans = 12
     p.wCircFan = 627
     p.wShade = 258.4

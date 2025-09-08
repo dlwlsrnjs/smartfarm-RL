@@ -80,7 +80,7 @@ cdef inline double* ODE(AuxiliaryStates* a, Parameters* p, double* x, double* u,
 
     # Vapor pressure of greenhouse air [Pa s^{-1}] = [kg m^{-1} s^{-3}]
     ki[15] = (1/a.capVpAir) * (a.mvCanAir+a.mvPadAir+a.mvFogAir+a.mvBlowAir \
-        -a.mvAirThScr-a.mvAirTop-a.mvAirOut-a.mvAirOutPad-a.mvAirMech-a.mvAirBlScr)
+        +a.mvMist -a.mvAirThScr-a.mvAirTop-a.mvAirOut-a.mvAirOutPad-a.mvAirMech-a.mvAirBlScr)
 
     # Vapor pressure of air in top compartment [Pa s^{-1}] = [kg m^{-1} s^{-3}]
     ki[16] = (1/a.capVpTop) * (a.mvAirTop-a.mvTopCovIn-a.mvTopOut)
