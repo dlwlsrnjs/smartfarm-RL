@@ -376,24 +376,24 @@ cdef inline void initParameters(Parameters* p, char noLamps, char ledLamps, char
     p.rSMin = 82
     p.sRs = -1
 
-    ## Contstruction
+    ## Contstruction (House 3 specifications)
     p.etaGlobAir = 0.1
     p.psi = 25
-    p.aFlr = 14000
-    p.aCov = 18000
-    p.hAir = 3.8
-    p.hGh = 4.2
+    p.aFlr = 756          # House 3 floor area [m²]
+    p.aCov = 972          # House 3 cover area [m²] (estimated)
+    p.hAir = 3.8          # Main compartment height [m]
+    p.hGh = 4.2           # Total greenhouse height [m]
     p.cHecIn = 1.86
     p.cHecOut1 = 2.8
     p.cHecOut2 = 1.2
     p.cHecOut3 = 1
     p.hElevation = 0
 
-    ## Ventialtion
-    p.aRoof = 1400
-    p.hVent = 0.68
+    ## Ventialtion (House 3 specifications)
+    p.aRoof = 75.6        # House 3 roof vent area [m²] (37.8 × 2)
+    p.hVent = 0.68        # Vent height [m]
     p.etaInsScr = 1
-    p.aSide = 0
+    p.aSide = 0           # No side vents
     p.cDgh = 0.75
     p.cLeakage = 1e-4
     p.cWgh = 0.09
